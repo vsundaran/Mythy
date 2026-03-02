@@ -1,0 +1,253 @@
+{
+  "info": {
+    "name": "RAG System API",
+    "description": "Retrieval-Augmented Generation API — Node.js + Supabase + OpenAI",
+    "_postman_id": "rag-system-collection-v1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string",
+      "description": "Base URL of the RAG server"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": ["{{base_url}}"],
+          "path": ["health"]
+        },
+        "description": "Verify the server is running and healthy."
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "status": "OK",
+          "code": 200,
+          "originalRequest": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/health" }
+          },
+          "body": "{\n  \"success\": true,\n  \"message\": \"Server is healthy\",\n  \"data\": {\n    \"status\": \"ok\",\n    \"environment\": \"development\",\n    \"timestamp\": \"2026-03-01T06:30:00.000Z\"\n  },\n  \"error\": null\n}"
+        }
+      ]
+    },
+    {
+      "name": "RAG",
+      "description": "Core RAG endpoints — ingestion and querying",
+      "item": [
+        {
+          "name": "Query — Ask a Question",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"What is Retrieval-Augmented Generation and what are its benefits?\"\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/rag/query",
+              "host": ["{{base_url}}"],
+              "path": ["rag", "query"]
+            },
+            "description": "Ask a question. The system embeds the question, retrieves the most relevant document chunks via cosine similarity, and returns a grounded GPT-4o-mini answer."
+          },
+          "response": [
+            {
+              "name": "200 — Grounded Answer",
+              "status": "OK",
+              "code": 200,
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"What is Retrieval-Augmented Generation and what are its benefits?\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/rag/query" }
+              },
+              "body": "{\n  \"success\": true,\n  \"message\": \"Query processed successfully\",\n  \"data\": {\n    \"answer\": \"Retrieval-Augmented Generation (RAG) is a technique that combines retrieval systems with generative models. Instead of relying solely on parametric memory, RAG retrieves relevant documents from an external knowledge base and provides them as context to the language model at inference time. Benefits include: reducing hallucination by grounding answers in retrieved facts, allowing access to up-to-date information without retraining, and supporting private or domain-specific document Q&A.\",\n    \"retrievedChunks\": 3,\n    \"sources\": [\n      {\n        \"content\": \"RAG is a technique that combines retrieval systems with generative models...\",\n        \"source\": \"AI Overview\",\n        \"similarity\": 0.9123\n      }\n    ]\n  },\n  \"error\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "Query — Out-of-Scope Question (Safety Test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"What is the capital of France?\"\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/rag/query",
+              "host": ["{{base_url}}"],
+              "path": ["rag", "query"]
+            },
+            "description": "Asks a question that is NOT covered in the ingested documents. The system should return a graceful 'information unavailable' response instead of hallucinating."
+          },
+          "response": [
+            {
+              "name": "200 — Graceful Fallback (0 chunks)",
+              "status": "OK",
+              "code": 200,
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"What is the capital of France?\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/rag/query" }
+              },
+              "body": "{\n  \"success\": true,\n  \"message\": \"Query processed successfully\",\n  \"data\": {\n    \"answer\": \"I'm sorry, that information is not available in the provided documents.\",\n    \"retrievedChunks\": 0,\n    \"sources\": []\n  },\n  \"error\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "Query — Validation Error (Empty Question)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"\"\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/rag/query",
+              "host": ["{{base_url}}"],
+              "path": ["rag", "query"]
+            },
+            "description": "Sends an empty question to verify the input validation middleware returns a proper 400 error."
+          },
+          "response": [
+            {
+              "name": "400 — Validation Failed",
+              "status": "Bad Request",
+              "code": 400,
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"question\": \"\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/rag/query" }
+              },
+              "body": "{\n  \"success\": false,\n  \"message\": \"Validation failed\",\n  \"error\": [\n    {\n      \"field\": \"question\",\n      \"reason\": \"question is required\"\n    }\n  ],\n  \"data\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "Query — Deep Dive Questions (ML Topics)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"What are the three types of machine learning?\"\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/rag/query",
+              "host": ["{{base_url}}"],
+              "path": ["rag", "query"]
+            },
+            "description": "Tests retrieval with a question answered in the sample document."
+          },
+          "response": []
+        },
+        {
+          "name": "Ingest — Upload File (multipart)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "document",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select your PDF, TXT, or MD file here"
+                },
+                {
+                  "key": "source",
+                  "value": "My Document",
+                  "type": "text",
+                  "description": "Human-readable label for this document (used in source attribution)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/rag/ingest",
+              "host": ["{{base_url}}"],
+              "path": ["rag", "ingest"]
+            },
+            "description": "Upload a PDF, TXT, or MD file to ingest into the vector store. The server will parse, chunk, embed, and store the document in Supabase automatically."
+          },
+          "response": [
+            {
+              "name": "201 — Ingested Successfully",
+              "status": "Created",
+              "code": 201,
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{base_url}}/rag/ingest" }
+              },
+              "body": "{\n  \"success\": true,\n  \"message\": \"Document ingested successfully\",\n  \"data\": {\n    \"source\": \"My Document\",\n    \"chunksCreated\": 9,\n    \"recordsInserted\": 9\n  },\n  \"error\": null\n}"
+            },
+            {
+              "name": "400 — No File Uploaded",
+              "status": "Bad Request",
+              "code": 400,
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{base_url}}/rag/ingest" }
+              },
+              "body": "{\n  \"success\": false,\n  \"message\": \"Validation failed\",\n  \"error\": {\n    \"field\": \"document\",\n    \"reason\": \"A file must be uploaded in the \\\"document\\\" field\"\n  },\n  \"data\": null\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+The Solar Village Project
+
+In the year 2035, a small village named Thulirpur in South India faced severe electricity shortages. The village relied entirely on diesel generators, which were expensive and harmful to the environment.
+
+A young electrical engineer named Arvind returned to his hometown after working in a metro city. He proposed a solution called the Solar Village Project.
+
+The idea was simple: install rooftop solar panels on every house and connect them to a shared microgrid system. Each house would generate its own electricity during the day and share excess power with neighbors.
+
+The village council was initially skeptical. They worried about cost, maintenance, and technical complexity.
+
+Arvind created a cost-sharing model where families paid small monthly installments. He also trained local youth to maintain the solar systems.
+
+Within one year, diesel usage reduced by 80%. Electricity became stable. Students could study at night, small businesses grew, and pollution levels decreased.
+
+The Solar Village Project became a model for sustainable rural electrification across India.
+
+The key principles behind the project were:
+1. Community ownership
+2. Renewable energy adoption
+3. Shared microgrid infrastructure
+4. Local skill development
+5. Long-term sustainability
