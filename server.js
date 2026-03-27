@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 
 const ragRoutes = require('./src/routes/rag.routes');
 const logger = require('./src/utils/logger');
+const { connectDb, closeDb } = require('./src/config/mongodb');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -99,12 +100,35 @@ app.use((err, _req, res, _next) => {
 });
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  logger.info(`✅ RAG Server running on http://localhost:${PORT}`);
-  logger.info(`   Environment : ${process.env.NODE_ENV || 'development'}`);
-  logger.info(`   Health check: http://localhost:${PORT}/health`);
-  logger.info(`   Query API   : POST http://localhost:${PORT}/rag/query`);
-  logger.info(`   Ingest API  : POST http://localhost:${PORT}/rag/ingest`);
+async function startServer() {
+  // Connect to MongoDB before accepting traffic
+  await connectDb();
+
+  const server = app.listen(PORT, () => {
+    logger.info(`✅ RAG Server running on http://localhost:${PORT}`);
+    logger.info(`   Environment : ${process.env.NODE_ENV || 'development'}`);
+    logger.info(`   Health check: http://localhost:${PORT}/health`);
+    logger.info(`   Query API   : POST http://localhost:${PORT}/rag/query`);
+    logger.info(`   Ingest API  : POST http://localhost:${PORT}/rag/ingest`);
+  });
+
+  // ─── Graceful Shutdown ───────────────────────────────────────────────────
+  async function shutdown(signal) {
+    logger.info(`${signal} received — shutting down gracefully`);
+    server.close(async () => {
+      await closeDb();
+      logger.info('Server and MongoDB connection closed');
+      process.exit(0);
+    });
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+startServer().catch((err) => {
+  logger.error(`Failed to start server: ${err.message}`);
+  process.exit(1);
 });
 
 module.exports = app;

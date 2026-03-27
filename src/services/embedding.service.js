@@ -1,5 +1,3 @@
-'use strict';
-
 const openai = require('../config/openai');
 const logger = require('../utils/logger');
 

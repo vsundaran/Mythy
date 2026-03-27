@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * CLI ingestion script.
  *

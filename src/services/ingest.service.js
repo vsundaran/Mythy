@@ -1,13 +1,12 @@
-'use strict';
-
 const path = require('path');
-const supabase = require('../config/supabase');
+const { getDb } = require('../config/mongodb');
 const { loadDocument } = require('../utils/pdfLoader');
 const { chunkText } = require('./chunk.service');
 const { generateEmbeddingsBatch } = require('./embedding.service');
 const logger = require('../utils/logger');
 
-const INSERT_BATCH_SIZE = 50; // Supabase rows per insert call
+const COLLECTION = 'Documents';
+const INSERT_BATCH_SIZE = 50; // documents per insertMany call
 
 /**
  * Full document ingestion pipeline.
@@ -16,12 +15,12 @@ const INSERT_BATCH_SIZE = 50; // Supabase rows per insert call
  *  1. Load & parse the document (PDF or text)
  *  2. Split into semantic chunks
  *  3. Generate embeddings for all chunks (batched)
- *  4. Insert chunk + embedding rows into Supabase
+ *  4. Insert chunk + embedding documents into MongoDB
  *
  * @param {string} filePath   - Path to the document file
  * @param {string} [source]   - Human-readable source label (e.g. filename)
  * @param {object} [metadata] - Optional additional metadata (e.g. { page: 1 })
- * @returns {Promise<{ chunksCreated: number, recordsInserted: number }>}
+ * @returns {Promise<{ source: string, chunksCreated: number, recordsInserted: number }>}
  */
 async function ingestDocument(filePath, source = null, metadata = {}) {
   const sourceName = source || path.basename(filePath);
@@ -46,8 +45,8 @@ async function ingestDocument(filePath, source = null, metadata = {}) {
   const embeddings = await generateEmbeddingsBatch(chunks, 10, 300);
   logger.info(`✔ Embeddings generated: ${embeddings.length}`);
 
-  // ── Step 4: Build rows and insert into Supabase ───────────────────────────
-  const rows = chunks.map((content, idx) => ({
+  // ── Step 4: Build documents and insert into MongoDB ───────────────────────
+  const docs = chunks.map((content, idx) => ({
     content,
     embedding: embeddings[idx],
     source: sourceName,
@@ -56,24 +55,24 @@ async function ingestDocument(filePath, source = null, metadata = {}) {
       chunkIndex: idx,
       totalChunks: chunks.length,
     },
+    createdAt: new Date(),
   }));
 
+  const db = await getDb();
+  const collection = db.collection(COLLECTION);
   let totalInserted = 0;
+  const totalBatches = Math.ceil(docs.length / INSERT_BATCH_SIZE);
 
-  for (let i = 0; i < rows.length; i += INSERT_BATCH_SIZE) {
-    const batch = rows.slice(i, i + INSERT_BATCH_SIZE);
+  for (let i = 0; i < docs.length; i += INSERT_BATCH_SIZE) {
+    const batch = docs.slice(i, i + INSERT_BATCH_SIZE);
     const batchNum = Math.floor(i / INSERT_BATCH_SIZE) + 1;
-    const totalBatches = Math.ceil(rows.length / INSERT_BATCH_SIZE);
 
-    const { error } = await supabase.from('documents').insert(batch);
+    const result = await collection.insertMany(batch);
 
-    if (error) {
-      logger.error(`Supabase insert failed (batch ${batchNum}): ${error.message}`);
-      throw new Error(`Supabase insert error: ${error.message}`);
-    }
-
-    totalInserted += batch.length;
-    logger.info(`✔ Records inserted: ${totalInserted}/${rows.length} (batch ${batchNum}/${totalBatches})`);
+    totalInserted += result.insertedCount;
+    logger.info(
+      `✔ Records inserted: ${totalInserted}/${docs.length} (batch ${batchNum}/${totalBatches})`,
+    );
   }
 
   const summary = {
