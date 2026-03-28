@@ -9,8 +9,11 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 
 const ragRoutes = require('./src/routes/rag.routes');
+const authRoutes = require('./src/routes/auth.routes');
 const logger = require('./src/utils/logger');
 const { connectDb, closeDb } = require('./src/config/mongodb');
+const connectMongoose = require('./src/config/mongoose');
+const authMiddleware = require('./src/middlewares/auth.middleware');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -61,7 +64,8 @@ app.get('/health', (_req, res) => {
 });
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
-app.use('/rag', ragRoutes);
+app.use('/auth', authRoutes);
+app.use('/rag', authMiddleware, ragRoutes);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 app.use((_req, res) => {
@@ -103,6 +107,7 @@ app.use((err, _req, res, _next) => {
 async function startServer() {
   // Connect to MongoDB before accepting traffic
   await connectDb();
+  await connectMongoose();
 
   const server = app.listen(PORT, () => {
     logger.info(`✅ RAG Server running on http://localhost:${PORT}`);
