@@ -28,14 +28,55 @@ const verifyGoogleToken = async (token) => {
 };
 
 /**
- * Generates a JWT for a user.
+ * Generates an access token for a user.
  * @param {string} userId 
  * @returns {string}
  */
 const generateToken = (userId) => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    expiresIn: '15m',
   });
+};
+
+/**
+ * Generates a refresh token for a user.
+ * @param {string} userId 
+ * @returns {string}
+ */
+const generateRefreshToken = (userId) => {
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
+    expiresIn: '7d',
+  });
+};
+
+/**
+ * Refreshes an access token using a valid refresh token.
+ * @param {string} token 
+ * @returns {Promise<object>}
+ */
+const refreshAccessToken = async (token) => {
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+
+    if (!user || user.refreshToken !== token) {
+      throw new Error('Invalid refresh token');
+    }
+
+    const newAccessToken = generateToken(user._id);
+    const newRefreshToken = generateRefreshToken(user._id);
+
+    user.refreshToken = newRefreshToken;
+    await user.save();
+
+    return {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    };
+  } catch (error) {
+    logger.error(`Refresh token failed: ${error.message}`);
+    throw new Error('Invalid or expired refresh token');
+  }
 };
 
 /**
@@ -73,6 +114,10 @@ const authenticateWithGoogle = async (googleToken) => {
   }
   
   const token = generateToken(user._id);
+  const refreshToken = generateRefreshToken(user._id);
+  
+  user.refreshToken = refreshToken;
+  await user.save();
   
   return {
     user: {
@@ -81,11 +126,14 @@ const authenticateWithGoogle = async (googleToken) => {
       name: user.name,
       picture: user.picture,
     },
-    token,
+    token, // access token
+    refreshToken,
   };
 };
 
 module.exports = {
   authenticateWithGoogle,
   generateToken,
+  generateRefreshToken,
+  refreshAccessToken,
 };

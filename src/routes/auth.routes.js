@@ -10,4 +10,11 @@ const router = express.Router();
  */
 router.post('/google', validateGoogleAuth, authController.googleAuth);
 
+/**
+ * @route   POST /auth/refresh
+ * @desc    Refresh access token using refresh token
+ * @access  Public
+ */
+router.post('/refresh', authController.refresh);
+
 module.exports = router;
