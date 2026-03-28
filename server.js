@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 
 const ragRoutes = require('./src/routes/rag.routes');
 const authRoutes = require('./src/routes/auth.routes');
+const chatRoutes = require('./src/routes/chat.routes');
 const logger = require('./src/utils/logger');
 const { connectDb, closeDb } = require('./src/config/mongodb');
 const connectMongoose = require('./src/config/mongoose');
@@ -66,6 +67,7 @@ app.get('/health', (_req, res) => {
 // ─── API Routes ───────────────────────────────────────────────────────────────
 app.use('/auth', authRoutes);
 app.use('/rag', authMiddleware, ragRoutes);
+app.use('/chat', authMiddleware, chatRoutes);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 app.use((_req, res) => {
