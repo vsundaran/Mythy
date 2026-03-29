@@ -81,4 +81,80 @@ function _findSplitPoint(text, windowStart, windowEnd) {
   return windowEnd;
 }
 
-module.exports = { chunkText };
+/**
+ * Extracts all 'Did you know?' facts from the text.
+ * A fact starts from "Did you know?" and continues until \n\n or the next "Myth " pattern.
+ * @param {string} text Full document text.
+ * @returns {string[]} Array of extracted fact strings.
+ */
+function extractDidYouKnowSections(text) {
+  if (!text) return [];
+  
+  const facts = [];
+  const regex = /Did you know\?[^]*?(?=\n\s*\n|(?:\n\s*(?:Myth\s*)?\d+[\.\:\)]?\s+)|$)/gi;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const factText = match[0].trim();
+    if (factText.length > 15) {
+      facts.push(factText);
+    }
+  }
+  return facts;
+}
+
+/**
+ * Splits the document into semantic myths.
+ * Looks for patterns like "Myth 1:", "Myth 2:", etc.
+ * @param {string} rawText Full document text.
+ * @returns {Array<{ mythNumber: number, title: string, content: string }>}
+ */
+function splitIntoMyths(rawText) {
+  if (!rawText) return [];
+  
+  const myths = [];
+  const mythRegex = /(?:^|\n)\s*(?:Myth\s*)?(\d+)[\.\:\)]?\s+([^\n\r]*)/gi;
+  const matches = [...rawText.matchAll(mythRegex)];
+  
+  for (let i = 0; i < matches.length; i++) {
+    const match = matches[i];
+    const startIndex = match.index;
+    const nextMatchIndex = (i + 1 < matches.length) ? matches[i + 1].index : rawText.length;
+    
+    // Extract the full myth block
+    let fullBlock = rawText.slice(startIndex, nextMatchIndex).trim();
+    
+    // Remove extracted "Did you know?" chunks from the myth's content so they are not duplicated
+    // However, if we just remove them, we might break the original text's flow, but it's requested to treat them as independent.
+    const factsInBlock = extractDidYouKnowSections(fullBlock);
+    for (const fact of factsInBlock) {
+      fullBlock = fullBlock.replace(fact, '').trim();
+    }
+    
+    const mythNumber = match[1] ? parseInt(match[1], 10) : (i + 1);
+    let titleMatch = match[2] ? match[2].trim() : `Myth ${mythNumber}`;
+    // Fallback if title is empty
+    if (!titleMatch || titleMatch.length === 0) {
+      titleMatch = `Myth ${mythNumber}`;
+    }
+    
+    // If the block is too large (>2000 chars), split it into 2 chunks max
+    if (fullBlock.length > 2000) {
+      const splitIndex = _findSplitPoint(fullBlock, Math.floor(fullBlock.length / 2), fullBlock.length - 1);
+      const chunk1 = fullBlock.slice(0, splitIndex).trim();
+      const chunk2 = fullBlock.slice(splitIndex).trim();
+      
+      if (chunk1.length > 0) {
+        myths.push({ mythNumber, title: titleMatch, content: chunk1 });
+      }
+      if (chunk2.length > 0) {
+        myths.push({ mythNumber, title: `${titleMatch} (Continued)`, content: chunk2 });
+      }
+    } else if (fullBlock.length > 0) {
+      myths.push({ mythNumber, title: titleMatch, content: fullBlock });
+    }
+  }
+  
+  return myths;
+}
+
+module.exports = { chunkText, extractDidYouKnowSections, splitIntoMyths };

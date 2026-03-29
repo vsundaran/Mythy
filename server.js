@@ -15,6 +15,8 @@ const logger = require('./src/utils/logger');
 const { connectDb, closeDb } = require('./src/config/mongodb');
 const connectMongoose = require('./src/config/mongoose');
 const authMiddleware = require('./src/middlewares/auth.middleware');
+const adminRoutes = require('./src/routes/admin.routes');
+const initAdmin = require('./src/utils/initAdmin');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -66,6 +68,7 @@ app.get('/health', (_req, res) => {
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
 app.use('/auth', authRoutes);
+app.use('/admin', adminRoutes);
 app.use('/rag', authMiddleware, ragRoutes);
 app.use('/chat', authMiddleware, chatRoutes);
 
@@ -110,6 +113,9 @@ async function startServer() {
   // Connect to MongoDB before accepting traffic
   await connectDb();
   await connectMongoose();
+  
+  // Seed the admin user if one doesn't exist
+  await initAdmin();
 
   const server = app.listen(PORT, () => {
     logger.info(`✅ RAG Server running on http://localhost:${PORT}`);

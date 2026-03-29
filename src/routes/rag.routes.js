@@ -102,11 +102,32 @@ router.post('/ingest', upload.single('document'), async (req, res, next) => {
     });
   }
 
+  if (!req.body.sourceLink || req.body.sourceLink.trim() === '') {
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      error: { field: 'sourceLink', reason: "Without source link don't store" },
+      data: null,
+    });
+  }
+
   try {
     const source = req.body.source || req.file.originalname;
+    
+    // Extract metadata with default fallback values
+    const metadata = {
+      documentId: req.body.documentId || 'breastfeeding_myths',
+      category: req.body.category || 'health',
+      subCategory: req.body.subCategory || 'breastfeeding',
+      sourceLink: req.body.sourceLink.trim(),
+    };
+
     logger.info(`POST /rag/ingest — file: ${req.file.filename}, source: ${source}`);
 
-    const summary = await ingestDocument(req.file.path, source);
+    const summary = await ingestDocument(req.file.path, source, metadata);
 
     // Clean up uploaded file after ingestion
     fs.unlink(req.file.path, (err) => {

@@ -1,7 +1,7 @@
 const path = require('path');
 const { getDb } = require('../config/mongodb');
 const { loadDocument } = require('../utils/pdfLoader');
-const { chunkText } = require('./chunk.service');
+const { chunkText, extractDidYouKnowSections, splitIntoMyths } = require('./chunk.service');
 const { generateEmbeddingsBatch } = require('./embedding.service');
 const logger = require('../utils/logger');
 
@@ -34,26 +34,79 @@ async function ingestDocument(filePath, source = null, metadata = {}) {
   logger.info(`Document loaded — ${text.length} characters`);
 
   // ── Step 2: Chunk text ────────────────────────────────────────────────────
-  const chunks = chunkText(text, 700, 50);
-  logger.info(`✔ Chunks created: ${chunks.length}`);
+  let chunkObjects = [];
+  let factsExtractedCount = 0;
 
-  if (chunks.length === 0) {
+  const hasMyths = /(?:^|\n)\s*(?:Myth\s*)?\d+[\.\:\)]?\s+/i.test(text);
+
+  if (hasMyths) {
+    logger.info(`Detected structured "Myth" patterns. Applying semantic chunking.`);
+    
+    // Extract facts
+    const facts = extractDidYouKnowSections(text);
+    factsExtractedCount = facts.length;
+    facts.forEach((fact, idx) => {
+      chunkObjects.push({
+        content: fact,
+        metadata: { ...metadata, type: 'fact', title: `Fact ${idx + 1}` },
+      });
+    });
+
+    // Extract myths
+    const myths = splitIntoMyths(text);
+    myths.forEach((myth) => {
+      chunkObjects.push({
+        content: myth.content,
+        metadata: {
+          ...metadata,
+          type: 'myth',
+          mythNumber: myth.mythNumber,
+          title: myth.title,
+        },
+      });
+    });
+  } else {
+    logger.info(`No structured "Myth" patterns detected. Applying generic chunking.`);
+    const chunks = chunkText(text, 700, 50);
+    chunks.forEach((chunk, idx) => {
+      chunkObjects.push({
+        content: chunk,
+        metadata: {
+          ...metadata,
+          type: 'generic',
+          chunkIndex: idx,
+          totalChunks: chunks.length,
+        },
+      });
+    });
+  }
+
+  logger.info(`✔ Chunks created: ${chunkObjects.length} (Facts: ${factsExtractedCount})`);
+
+  if (chunkObjects.length === 0) {
     throw new Error('No text chunks could be extracted from the document');
   }
 
   // ── Step 3: Generate embeddings ───────────────────────────────────────────
-  const embeddings = await generateEmbeddingsBatch(chunks, 10, 300);
+  const textsToEmbed = chunkObjects.map((obj) => obj.content);
+  const embeddings = await generateEmbeddingsBatch(textsToEmbed, 10, 300);
   logger.info(`✔ Embeddings generated: ${embeddings.length}`);
 
   // ── Step 4: Build documents and insert into MongoDB ───────────────────────
-  const docs = chunks.map((content, idx) => ({
-    content,
+  const docs = chunkObjects.map((obj, idx) => ({
+    content: obj.content,
     embedding: embeddings[idx],
-    source: sourceName,
     metadata: {
-      ...metadata,
-      chunkIndex: idx,
-      totalChunks: chunks.length,
+      documentId: metadata.documentId || 'unknown_document',
+      category: metadata.category || 'general',
+      subCategory: metadata.subCategory,
+      sourceLink: metadata.sourceLink,
+      type: obj.metadata.type,
+      mythNumber: obj.metadata.mythNumber,
+      title: obj.metadata.title,
+      source: sourceName,
+      chunkIndex: obj.metadata.chunkIndex,
+      totalChunks: obj.metadata.totalChunks,
     },
     createdAt: new Date(),
   }));
@@ -77,7 +130,7 @@ async function ingestDocument(filePath, source = null, metadata = {}) {
 
   const summary = {
     source: sourceName,
-    chunksCreated: chunks.length,
+    chunksCreated: chunkObjects.length,
     recordsInserted: totalInserted,
   };
 
